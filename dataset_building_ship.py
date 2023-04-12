@@ -10,7 +10,7 @@ import pickle
 from mpl_toolkits import mplot3d
 import os
 import glob
-
+from tqdm import tqdm
 #==================================================================================#
 # Utility functions
 #==================================================================================#
@@ -49,6 +49,16 @@ def read_vel(fn):
 
 def read_coordinates(fn):
     return(pd.read_csv(fn,delim_whitespace=0,usecols=[0]))
+#==================================================================================#
+# Finding names of files in a folder 
+#==================================================================================#
+def find_name(folder_path):
+	os.chdir(folder_path)
+
+	all_filenames=[]
+	for infile in sorted(glob.glob('*.csv'),key=os.path.getmtime):
+	    all_filenames.append(str(infile))
+	return all_filenames
 
 #==================================================================================#
 #=========================== DATA PREPROCESSING ===================================#
@@ -60,11 +70,6 @@ Starccm+ ----> Full_dataset ----> Reduced_dataset ----> Different csv files ( do
 boundary, initial ) ----> Use these csvs in the model building code.
 
 '''
-
-#==================================================================================#
-#==================================================================================#
-#==================================================================================#
-
 
 
 #==================================================================================#
@@ -115,13 +120,13 @@ def build_dataset():
 		data_frame.to_csv(finalpath + name,index=False)
 
 # build_dataset()
-#==================================================================================#
-# Build a reduced dataset
 
+#==================================================================================#
+# Building a reduced dataset from the full dataset
+#==================================================================================#
 '''
 This function builds the reduced dataset and returns a csv file at each time step
 '''
-#==================================================================================#
 def build_reduced_data(full_data_path,reduced_data_path):
 	
 	# Getting the names of files in full data 
@@ -159,5 +164,86 @@ def build_reduced_data(full_data_path,reduced_data_path):
 full_data_path=r"E:\Vamsi_oe20s302\Original Ship Simulation\twice_velo\Full dataset"
 reduced_data_path=r"E:\Vamsi_oe20s302\Original Ship Simulation\twice_velo\Reduced dataset"
 
-build_reduced_data(full_data_path,reduced_data_path)
+# build_reduced_data(full_data_path,reduced_data_path)
 
+#==================================================================================#
+# Building CSV files from the reduced dataset
+#==================================================================================#
+
+data_origin_path =r"E:\Vamsi_oe20s302\Original Ship Simulation\twice_velo\Reduced dataset"
+csv_path		 =r"E:\Vamsi_oe20s302\Original Ship Simulation\twice_velo\Final_combine_csvs"
+
+def build_boundary(file_path,test_path):
+	files=find_name(file_path)
+	for i in range(1,len(files)):
+		e=pd.read_csv(file_path+'/'+str(files[i]))
+		e=e.to_numpy()
+		xmin=e.min(axis=0)[0]
+		xmax=e.max(axis=0)[0]
+		ymin=e.min(axis=0)[1]
+		ymax=e.max(axis=0)[1]
+
+		xmin_limit=xmin+0.05
+		xmax_limit=xmax-0.05
+
+		ymin_limit=ymin+0.05
+		ymax_limit=ymax-0.05
+
+		bc1=e[:,:][e[:,0]<xmin_limit]
+		bc2=e[:,:][e[:,0]>xmax_limit]
+		bc3=e[:,:][e[:,1]<ymin_limit]
+		bc4=e[:,:][e[:,1]>ymax_limit]
+
+		if i ==1:
+			boundary=np.concatenate([bc1,bc2,bc3,bc4],0)
+		else:
+			boundary=np.append(boundary,np.vstack((bc1,bc2,bc3,bc4)),axis=0)
+
+	boundary_df=pd.DataFrame(boundary)
+	name=r'\boundary.csv'
+	boundary_df.to_csv(test_path+name,index=False)
+
+# Run this to build the boundary dataset csv file
+# build_boundary(data_origin_path,csv_path)
+
+def build_domain(file_path,test_path):	
+	files=find_name(file_path)
+	for i in range(len(files)):
+		e=pd.read_csv(file_path+'/'+str(files[i]))
+		e=e.to_numpy()
+		xmin=e.min(axis=0)[0]
+		xmax=e.max(axis=0)[0]
+		ymin=e.min(axis=0)[1]
+		ymax=e.max(axis=0)[1]
+
+		xmin_limit=xmin+0.05
+		xmax_limit=xmax-0.05
+		ymin_limit=ymin+0.05
+		ymax_limit=ymax-0.05
+
+		bc1=e[:,:][e[:,0]>xmin_limit]
+		bc2=bc1[:,:][bc1[:,0]<xmax_limit]
+		bc3=bc2[:,:][bc2[:,1]>ymin_limit]
+		domain_temp=bc3[:,:][bc3[:,1]<ymax_limit]
+		
+		if i==0:
+			domain=domain_temp
+		else:
+			domain=np.append(domain,domain_temp,axis=0)
+	domain_df=pd.DataFrame(domain)
+	name=r'\domain.csv'
+	domain_df.to_csv(test_path+name,index=False)
+	
+# Run this to build the domain dataset csv file
+build_domain(data_origin_path,csv_path)
+
+def build_initial(file_path,test_path):
+	files=find_name(file_path)
+	initial_file=str(files[0])
+	e=pd.read_csv(file_path+'/'+initial_file)
+	e=pd.DataFrame(e)
+	name=r'\initial.csv'
+	e.to_csv(test_path+name,index=False)
+
+# Run this to build the initial dataset csv file
+# build_initial(data_origin_path,csv_path)
